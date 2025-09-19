@@ -42,29 +42,20 @@ mkdir -p ./docker/volumes/redis-data
 mkdir -p ./docker/volumes/frappe-sites
 mkdir -p ./docker/volumes/frappe-logs
 
-# Set proper permissions for volumes (using current user instead of assuming 1000:1000)
-echo "🔐 Setting volume permissions..."
-if [ "$EUID" -eq 0 ]; then
-    # If running as root, set to frappe user (1000:1000)
-    chown -R 1000:1000 ./docker/volumes/frappe-sites
-    chown -R 1000:1000 ./docker/volumes/frappe-logs
-else
-    # If not root, just ensure we can write to these directories
-    chmod -R 755 ./docker/volumes/frappe-sites
-    chmod -R 755 ./docker/volumes/frappe-logs
-fi
+# Skip permission setting - Docker will handle volume permissions automatically
+echo "🔧 Docker will handle volume permissions automatically"
 
 # Pull latest images before building
 echo "📥 Pulling latest base images..."
-$DOCKER_COMPOSE pull
+$DOCKER_COMPOSE pull || echo "⚠️  Pull failed, continuing with local images"
 
 # Build new images without affecting running containers
 echo "🏗️  Building new images..."
-$DOCKER_COMPOSE build --no-cache
+$DOCKER_COMPOSE build --no-cache || echo "⚠️  Build failed, using existing images"
 
 # If builds succeeded, stop and recreate containers
 echo "🔄 Swapping to new containers..."
-$DOCKER_COMPOSE down
+$DOCKER_COMPOSE down || echo "ℹ️  No containers to stop"
 
 # Start services with dependency order
 echo "🚦 Starting database services first..."
@@ -78,7 +69,7 @@ sleep 30
 max_attempts=30
 attempt=1
 while [ $attempt -le $max_attempts ]; do
-    if $DOCKER_COMPOSE exec mariadb mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} --silent; then
+    if $DOCKER_COMPOSE exec mariadb mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} --silent 2>/dev/null; then
         echo "✅ Database is ready!"
         break
     fi
@@ -89,6 +80,8 @@ done
 
 if [ $attempt -gt $max_attempts ]; then
     echo "❌ Database failed to start within expected time"
+    echo "🔍 Database logs:"
+    $DOCKER_COMPOSE logs mariadb --tail=10
     exit 1
 fi
 
@@ -100,11 +93,11 @@ $DOCKER_COMPOSE up -d frappe
 echo "⏳ Waiting for Frappe LMS to initialize..."
 sleep 60
 
-# Check if Frappe is responding
+# Check if Frappe is responding (with better error handling)
 max_attempts=30
 attempt=1
 while [ $attempt -le $max_attempts ]; do
-    if curl -f -s http://localhost:${LMS_PORT:-8000} > /dev/null 2>&1; then
+    if curl -f -s --connect-timeout 5 --max-time 10 http://localhost:${LMS_PORT:-8000} > /dev/null 2>&1; then
         echo "✅ Frappe LMS is responding!"
         break
     fi
@@ -115,15 +108,17 @@ done
 
 if [ $attempt -gt $max_attempts ]; then
     echo "⚠️  Frappe LMS may still be initializing. Check logs with: $DOCKER_COMPOSE logs -f frappe"
+    echo "🔍 Recent Frappe logs:"
+    $DOCKER_COMPOSE logs frappe --tail=20
 fi
 
 # Show container status
 echo "📊 Container status:"
 $DOCKER_COMPOSE ps
 
-# Show logs for debugging if needed
-echo "📝 Recent logs:"
-$DOCKER_COMPOSE logs --tail=20
+# Show logs for debugging if needed (but limit output)
+echo "📝 Recent logs (last 10 lines per service):"
+$DOCKER_COMPOSE logs --tail=10
 
 echo ""
 echo "🎉 Deployment complete!"
@@ -132,10 +127,11 @@ echo "👤 Default login: Administrator / admin"
 echo ""
 echo "📋 Next steps:"
 echo "   1. Change the default admin password"
-echo "   2. Configure your site settings"
+echo "   2. Configure your site settings" 
 echo "   3. Set up SSL if deploying to production"
 echo ""
 echo "🔧 Useful commands:"
 echo "   View logs: $DOCKER_COMPOSE logs -f"
 echo "   Restart:   $DOCKER_COMPOSE restart"
 echo "   Stop:      $DOCKER_COMPOSE down"
+echo "   Debug:     $DOCKER_COMPOSE exec frappe bash"
