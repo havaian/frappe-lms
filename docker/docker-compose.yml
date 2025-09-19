@@ -1,4 +1,3 @@
-version: "3.8"
 name: frappe-lms
 
 services:
@@ -52,53 +51,56 @@ services:
     image: frappe/bench:latest
     container_name: frappe-lms-app
     restart: unless-stopped
+    user: root
     command: |
       bash -c "
-        # Wait for database to be ready
-        until mysqladmin ping -h mariadb -u root -p${MYSQL_ROOT_PASSWORD} --silent; do
-          echo 'Waiting for database...'
-          sleep 5
-        done
+        # Fix permissions first
+        chown -R frappe:frappe /home/frappe
+        chmod -R 755 /home/frappe
         
-        # Initialize bench if not exists
-        if [ ! -d '/home/frappe/frappe-bench' ]; then
-          echo 'Creating new bench...'
-          bench init --frappe-branch version-15 --python python3.10 frappe-bench
+        # Create directories with proper permissions
+        mkdir -p /home/frappe/frappe-bench/logs
+        chown -R frappe:frappe /home/frappe/frappe-bench/logs
+        
+        # Switch to frappe user for the rest
+        su frappe -c '
+          cd /home/frappe
+          
+          # Wait for database to be ready
+          until mysqladmin ping -h mariadb -u root -p${MYSQL_ROOT_PASSWORD} --silent; do
+            echo \"Waiting for database...\"
+            sleep 5
+          done
+          
+          # Initialize bench if not exists
+          if [ ! -d \"/home/frappe/frappe-bench\" ]; then
+            echo \"Creating new bench...\"
+            bench init --frappe-branch version-15 --python python3.11 frappe-bench
+            cd frappe-bench
+            
+            # Get LMS app
+            bench get-app https://github.com/frappe/lms
+            
+            # Create site
+            bench new-site ${FRAPPE_SITE_NAME_HEADER} \
+              --mariadb-root-password ${MYSQL_ROOT_PASSWORD} \
+              --admin-password ${ADMIN_PASSWORD:-admin} \
+              --db-host mariadb \
+              --db-port 3306 \
+              --redis-cache redis://redis:6379 \
+              --redis-queue redis://redis:6379 \
+              --redis-socketio redis://redis:6379
+            
+            # Install LMS app
+            bench --site ${FRAPPE_SITE_NAME_HEADER} install-app lms
+          fi
+          
           cd frappe-bench
           
-          # Get LMS app
-          bench get-app https://github.com/frappe/lms
-          
-          # Create site
-          bench new-site ${FRAPPE_SITE_NAME_HEADER} \
-            --mariadb-root-password ${MYSQL_ROOT_PASSWORD} \
-            --admin-password ${ADMIN_PASSWORD:-admin} \
-            --db-host mariadb \
-            --db-port 3306 \
-            --redis-cache redis://redis:6379 \
-            --redis-queue redis://redis:6379 \
-            --redis-socketio redis://redis:6379
-          
-          # Install LMS app
-          bench --site ${FRAPPE_SITE_NAME_HEADER} install-app lms
-          
-          # Set site in production mode
-          if [ '${FRAPPE_ENV}' = 'production' ]; then
-            bench --site ${FRAPPE_SITE_NAME_HEADER} set-config developer_mode 0
-            bench --site ${FRAPPE_SITE_NAME_HEADER} set-config server_script_enabled 1
-            bench setup production --user frappe
-          fi
-        fi
-        
-        cd frappe-bench
-        
-        # Start the application
-        if [ '${FRAPPE_ENV}' = 'production' ]; then
-          bench setup production --user frappe
-          supervisord -c /etc/supervisor/supervisord.conf
-        else
+          # Always start in development mode for simplicity
+          echo \"Starting Frappe LMS in development mode...\"
           bench start
-        fi
+        '
       "
     environment:
       - SHELL=/bin/bash
