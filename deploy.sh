@@ -17,14 +17,14 @@ check_docker_compose() {
 DOCKER_COMPOSE=$(check_docker_compose)
 
 # Check if .env file exists
-if [ ! -f .env ]; then
+if [ ! -f ./docker/.env ]; then
     echo "❌ Error: .env file not found. Please create one first."
     echo "💡 Copy .env.example to .env and configure your settings."
     exit 1
 fi
 
 # Source environment variables for validation
-source .env
+source ./docker/.env
 
 # Validate required environment variables
 required_vars=("FRAPPE_SITE_NAME_HEADER" "DB_PASSWORD" "MYSQL_ROOT_PASSWORD")
@@ -37,21 +37,21 @@ done
 
 # Create necessary directories if they don't exist
 echo "📁 Creating necessary directories..."
-mkdir -p ./volumes/mariadb-data
-mkdir -p ./volumes/redis-data
-mkdir -p ./volumes/frappe-sites
-mkdir -p ./volumes/frappe-logs
+mkdir -p ./docker/volumes/mariadb-data
+mkdir -p ./docker/volumes/redis-data
+mkdir -p ./docker/volumes/frappe-sites
+mkdir -p ./docker/volumes/frappe-logs
 
 # Set proper permissions for volumes (using current user instead of assuming 1000:1000)
 echo "🔐 Setting volume permissions..."
 if [ "$EUID" -eq 0 ]; then
     # If running as root, set to frappe user (1000:1000)
-    chown -R 1000:1000 ./volumes/frappe-sites
-    chown -R 1000:1000 ./volumes/frappe-logs
+    chown -R 1000:1000 ./docker/volumes/frappe-sites
+    chown -R 1000:1000 ./docker/volumes/frappe-logs
 else
     # If not root, just ensure we can write to these directories
-    chmod -R 755 ./volumes/frappe-sites
-    chmod -R 755 ./volumes/frappe-logs
+    chmod -R 755 ./docker/volumes/frappe-sites
+    chmod -R 755 ./docker/volumes/frappe-logs
 fi
 
 # Pull latest images before building
