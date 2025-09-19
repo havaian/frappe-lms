@@ -9,7 +9,7 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
-      - --skip-innodb-read-only-compressed
+      - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
       - --innodb-file-per-table=1
       - --innodb-buffer-pool-size=256M
       - --max-connections=500
@@ -19,7 +19,7 @@ services:
       MYSQL_USER: ${DB_USER:-frappe}
       MYSQL_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./volumes/mariadb-data:/var/lib/mysql
+      - mariadb-data:/var/lib/mysql
     ports:
       - "${DB_PORT:-3306}:3306"
     networks:
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
-      - ./volumes/redis-data:/data
+      - redis-data:/data
     ports:
       - "${REDIS_PORT:-6379}:6379"
     networks:
@@ -51,82 +51,42 @@ services:
     image: frappe/bench:latest
     container_name: frappe-lms-app
     restart: unless-stopped
-    user: root
-    command: |
-      bash -c "
-        # Fix permissions first
-        chown -R frappe:frappe /home/frappe
-        chmod -R 755 /home/frappe
-        
-        # Create directories with proper permissions
-        mkdir -p /home/frappe/frappe-bench/logs
-        chown -R frappe:frappe /home/frappe/frappe-bench/logs
-        
-        # Switch to frappe user for the rest
-        su frappe -c '
-          cd /home/frappe
-          
-          # Wait for database to be ready
-          until mysqladmin ping -h mariadb -u root -p${MYSQL_ROOT_PASSWORD} --silent; do
-            echo \"Waiting for database...\"
-            sleep 5
-          done
-          
-          # Initialize bench if not exists
-          if [ ! -d \"/home/frappe/frappe-bench\" ]; then
-            echo \"Creating new bench...\"
-            bench init --frappe-branch version-15 --python python3.11 frappe-bench
-            cd frappe-bench
-            
-            # Get LMS app
-            bench get-app https://github.com/frappe/lms
-            
-            # Create site
-            bench new-site ${FRAPPE_SITE_NAME_HEADER} \
-              --mariadb-root-password ${MYSQL_ROOT_PASSWORD} \
-              --admin-password ${ADMIN_PASSWORD:-admin} \
-              --db-host mariadb \
-              --db-port 3306 \
-              --redis-cache redis://redis:6379 \
-              --redis-queue redis://redis:6379 \
-              --redis-socketio redis://redis:6379
-            
-            # Install LMS app
-            bench --site ${FRAPPE_SITE_NAME_HEADER} install-app lms
-          fi
-          
-          cd frappe-bench
-          
-          # Always start in development mode for simplicity
-          echo \"Starting Frappe LMS in development mode...\"
-          bench start
-        '
-      "
+    command: bash /workspace/init.sh
     environment:
       - SHELL=/bin/bash
-      - FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER}
+      # Site Configuration
+      - FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-lms.localhost}
+      - SITES=${SITES:-lms.localhost}
+      # Database Configuration
       - DB_HOST=mariadb
       - DB_PORT=3306
       - DB_NAME=${DB_NAME:-frappe}
       - DB_USER=${DB_USER:-frappe}
       - DB_PASSWORD=${DB_PASSWORD}
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - REDIS_CACHE=redis://redis:6379
-      - REDIS_QUEUE=redis://redis:6379
-      - REDIS_SOCKETIO=redis://redis:6379
+      # Redis Configuration
+      - REDIS_CACHE=redis://redis:6379/0
+      - REDIS_QUEUE=redis://redis:6379/1
+      - REDIS_SOCKETIO=redis://redis:6379/2
+      # Admin Configuration
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      # Environment Mode
       - FRAPPE_ENV=${FRAPPE_ENV:-development}
-      # Email settings (optional)
+      - DEVELOPER_MODE=${DEVELOPER_MODE:-1}
+      # Email Configuration (Optional)
       - MAIL_SERVER=${MAIL_SERVER:-}
       - MAIL_PORT=${MAIL_PORT:-587}
       - MAIL_USE_TLS=${MAIL_USE_TLS:-true}
       - MAIL_USERNAME=${MAIL_USERNAME:-}
       - MAIL_PASSWORD=${MAIL_PASSWORD:-}
+      # Node/Python versions
+      - NODE_VERSION_DEVELOP=${NODE_VERSION_DEVELOP:-18}
+      - PYTHON_VERSION=${PYTHON_VERSION:-3.11}
     working_dir: /home/frappe
     volumes:
-      - ./volumes/frappe-sites:/home/frappe/frappe-bench/sites
-      - ./volumes/frappe-logs:/home/frappe/frappe-bench/logs
       - .:/workspace
+      - frappe-sites:/home/frappe/frappe-bench/sites
+      - frappe-logs:/home/frappe/frappe-bench/logs
     ports:
       - "${LMS_PORT:-8000}:8000"
       - "${SOCKETIO_PORT:-9000}:9000"
@@ -137,11 +97,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/method/ping"]
-      timeout: 30s
-      retries: 5
-      interval: 60s
 
 networks:
   frappe-network:
