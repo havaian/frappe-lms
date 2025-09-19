@@ -21,6 +21,12 @@ services:
     command: bash /workspace/init.sh
     environment:
       - SHELL=/bin/bash
+      - MAIL_SERVER=mail.ytech.space
+      - MAIL_PORT=587
+      - MAIL_USE_TLS=0
+      - MAIL_USERNAME=lms@e-stud.uz
+      - MAIL_PASSWORD=tuRUcH21nageRv
+      - AUTO_EMAIL_ID=lms@e-stud.uz
     working_dir: /home/frappe
     volumes:
       - .:/workspace

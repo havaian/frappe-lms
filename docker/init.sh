@@ -32,9 +32,19 @@ bench new-site lms.ytech.space \
 --admin-password t2EvKPJi0in7lIcwNwGHEzWbGXwiD3rB \
 --no-mariadb-socket
 
+# Configure app settings
 bench --site lms.ytech.space install-app lms
 bench --site lms.ytech.space set-config developer_mode 1
 bench --site lms.ytech.space clear-cache
+
+# Configure email settings
+bench --site lms.ytech.space set-config mail_server ${MAIL_SERVER}
+bench --site lms.ytech.space set-config mail_port ${MAIL_PORT}
+bench --site lms.ytech.space set-config use_tls ${MAIL_USE_TLS}
+bench --site lms.ytech.space set-config mail_login ${MAIL_USERNAME}
+bench --site lms.ytech.space set-config mail_password ${MAIL_PASSWORD}
+bench --site lms.ytech.space set-config auto_email_id ${AUTO_EMAIL_ID}
+
 bench use lms.ytech.space
 
 bench start
