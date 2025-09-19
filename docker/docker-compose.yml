@@ -9,7 +9,7 @@ services:
       - --skip-character-set-client-handshake
       - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
     environment:
-      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASS}
     volumes:
       - mariadb-data:/var/lib/mysql
 
@@ -25,8 +25,8 @@ services:
     volumes:
       - .:/workspace
     ports:
-      - 8000:8000
-      - 9000:9000
+      - ${WEB_EXPOSE_1}:8000
+      - ${WEB_EXPOSE_2}:9000
 
 volumes:
   mariadb-data:
