@@ -3,7 +3,7 @@
 # Exit on error
 set -e
 
-echo "🚀 Starting Frappe LMS deployment process..."
+echo "🚀 Starting deployment process..."
 
 # Function to check if docker compose command exists and use appropriate version
 check_docker_compose() {
@@ -16,40 +16,13 @@ check_docker_compose() {
 
 DOCKER_COMPOSE=$(check_docker_compose)
 
-# Check if .env file exists
-if [ ! -f ./docker/.env ]; then
-    echo "❌ Error: .env file not found in ./docker/"
-    echo "💡 Copy .env.example to .env and configure your settings."
-    exit 1
-fi
+# Build new images without affecting running containers
+echo "🏗️  Building new images..."
+$DOCKER_COMPOSE build
 
-# Source environment variables for validation
-source ./docker/.env
+# If builds succeeded, stop and recreate containers
+echo "🔄 Swapping to new containers..."
+$DOCKER_COMPOSE down
+$DOCKER_COMPOSE up -d --force-recreate
 
-# Validate required environment variables
-required_vars=("FRAPPE_SITE_NAME_HEADER" "DB_PASSWORD" "MYSQL_ROOT_PASSWORD")
-for var in "${required_vars[@]}"; do
-    if [ -z "${!var}" ]; then
-        echo "❌ Error: Required environment variable $var is not set in .env"
-        exit 1
-    fi
-done
-
-# Make init.sh executable
-echo "🔧 Making init.sh executable..."
-chmod +x ./docker/init.sh
-
-# Pull latest images
-echo "📥 Pulling latest base images..."
-$DOCKER_COMPOSE pull || echo "⚠️  Pull failed, continuing with local images"
-
-# Stop existing containers
-echo "🔄 Stopping existing containers..."
-$DOCKER_COMPOSE down || echo "ℹ️  No containers to stop"
-
-# Start all services
-echo "🚦 Starting all services..."
-$DOCKER_COMPOSE up -d --build
-
-# Wait for services to be ready
-    echo "✅ Derployment completed!"
+echo "📢 Deployment complete!"

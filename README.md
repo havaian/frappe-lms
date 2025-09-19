@@ -143,7 +143,7 @@ You need Docker, docker-compose and git setup on your machine. Refer [Docker doc
 
     docker compose up -d
 
-**Step 3**: The site [http://lms.localhost:8000/lms](http://lms.localhost:8000/lms) should now be available. The default credentials are:
+**Step 3**: The site [http://lms.ytech.space:8000/lms](http://lms.ytech.space:8000/lms) should now be available. The default credentials are:
 - Username: Administrator
 - Password: admin
 

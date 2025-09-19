@@ -1,113 +1,32 @@
-name: frappe-lms
-
+version: "3.7"
+name: lms
 services:
   mariadb:
     image: mariadb:10.8
-    container_name: frappe-lms-mariadb
-    restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
       - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
-      - --innodb-file-per-table=1
-      - --innodb-buffer-pool-size=256M
-      - --max-connections=500
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${DB_NAME:-frappe}
-      MYSQL_USER: ${DB_USER:-frappe}
-      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASS}
     volumes:
       - mariadb-data:/var/lib/mysql
-    ports:
-      - "${DB_PORT:-3306}:3306"
-    networks:
-      - frappe-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      timeout: 10s
-      retries: 5
-      interval: 30s
 
   redis:
-    image: redis:7-alpine
-    container_name: frappe-lms-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis-data:/data
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    networks:
-      - frappe-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      timeout: 10s
-      retries: 5
-      interval: 30s
+    image: redis:alpine
 
   frappe:
     image: frappe/bench:latest
-    container_name: frappe-lms-app
-    restart: unless-stopped
     command: bash /workspace/init.sh
     environment:
       - SHELL=/bin/bash
-      # Site Configuration
-      - FRAPPE_SITE_NAME_HEADER=${FRAPPE_SITE_NAME_HEADER:-lms.localhost}
-      - SITES=${SITES:-lms.localhost}
-      # Database Configuration
-      - DB_HOST=mariadb
-      - DB_PORT=3306
-      - DB_NAME=${DB_NAME:-frappe}
-      - DB_USER=${DB_USER:-frappe}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      # Redis Configuration
-      - REDIS_CACHE=redis://redis:6379/0
-      - REDIS_QUEUE=redis://redis:6379/1
-      - REDIS_SOCKETIO=redis://redis:6379/2
-      # Admin Configuration
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
-      # Environment Mode
-      - FRAPPE_ENV=${FRAPPE_ENV:-development}
-      - DEVELOPER_MODE=${DEVELOPER_MODE:-1}
-      # Email Configuration (Optional)
-      - MAIL_SERVER=${MAIL_SERVER:-}
-      - MAIL_PORT=${MAIL_PORT:-587}
-      - MAIL_USE_TLS=${MAIL_USE_TLS:-true}
-      - MAIL_USERNAME=${MAIL_USERNAME:-}
-      - MAIL_PASSWORD=${MAIL_PASSWORD:-}
-      # Node/Python versions
-      - NODE_VERSION_DEVELOP=${NODE_VERSION_DEVELOP:-18}
-      - PYTHON_VERSION=${PYTHON_VERSION:-3.11}
     working_dir: /home/frappe
     volumes:
       - .:/workspace
-      - frappe-sites:/home/frappe/frappe-bench/sites
-      - frappe-logs:/home/frappe/frappe-bench/logs
     ports:
-      - "${LMS_PORT:-8000}:8000"
-      - "${SOCKETIO_PORT:-9000}:9000"
-    networks:
-      - frappe-network
-    depends_on:
-      mariadb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-networks:
-  frappe-network:
-    driver: bridge
+      - ${WEB_EXPOSE_1}:8000
+      - ${WEB_EXPOSE_2}:9000
 
 volumes:
   mariadb-data:
-    driver: local
-  redis-data:
-    driver: local
-  frappe-sites:
-    driver: local
-  frappe-logs:
-    driver: local
